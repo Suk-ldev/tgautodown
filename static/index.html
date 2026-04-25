@@ -49,32 +49,15 @@
 
             <div id="success-container" class="success-container hidden">
                 <div class="success-message">
-                    <h2>🎉 登录成功！</h2>
-                    <p>Telegram账号已成功登录</p>
-                    <div class="user-info">
-                        <h3>用户信息</h3>
-                        <div class="info-grid">
-                            <div class="info-item">
-                                <span class="info-label">AppID:</span>
-                                <span id="user-appid" class="info-value">-</span>
-                            </div>
-                            <div class="info-item">
-                                <span class="info-label">AppHash:</span>
-                                <span id="user-apphash" class="info-value">-</span>
-                            </div>
-                            <div class="info-item">
-                                <span class="info-label">手机号码:</span>
-                                <span id="user-phone" class="info-value">-</span>
-                            </div>
-                            <div class="info-item">
-                                <span class="info-label">FirstName:</span>
-                                <span id="user-firstname" class="info-value">-</span>
-                            </div>
-                            <div class="info-item">
-                                <span class="info-label">UserName:</span>
-                                <span id="user-username" class="info-value">-</span>
-                            </div>
+                    <h2>登录成功</h2>
+                    <p>正在监听 Telegram 下载任务</p>
+                    <div class="download-panel">
+                        <div class="download-panel-header">
+                            <h3>下载进度</h3>
+                            <button class="btn btn-secondary btn-small" onclick="loadDownloads()">刷新</button>
                         </div>
+                        <div id="download-list" class="download-list"></div>
+                        <div id="download-empty" class="download-empty">暂无正在下载任务</div>
                     </div>
                 </div>
             </div>

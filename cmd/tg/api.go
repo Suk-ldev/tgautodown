@@ -68,6 +68,7 @@ type TgSuber struct {
 	getLoginCode TgLoginCodeHnd
 	scis         map[int64]SubChannelInfo
 	mhnds        map[TgMsgClass]TgMsgHnd
+	downloads    *DownloadManager
 	status       int
 	gctx         context.Context
 	gctxCancel   context.CancelFunc
@@ -79,11 +80,12 @@ type TgLoginCodeHnd func() string
 type TgOnSaveDoneHnd func(ts *TgSuber, savePath string, msgid int, tgmsg *TgMsg, err error)
 
 type TgMsg struct {
-	From     *SubChannelInfo
-	Date     int64
-	Text     string
-	FileName string
-	FileSize int64
+	From        *SubChannelInfo
+	Date        int64
+	Text        string
+	FileName    string
+	FileSize    int64
+	DownloadUID int64
 
 	ctx   context.Context
 	msg   *tg.Message
@@ -105,6 +107,7 @@ func NewTG(appid int, apphash, phone string) *TgSuber {
 		AppHash:   apphash,
 		UserPhone: phone,
 		mhnds:     map[TgMsgClass]TgMsgHnd{},
+		downloads: NewDownloadManager(),
 		status:    TgstatusInit,
 	}
 	return ts
@@ -260,6 +263,34 @@ func (ts *TgSuber) SaveFile(msg *TgMsg, savePath string, done TgOnSaveDoneHnd) e
 	default:
 		return ErrMsgClsUnsupport
 	}
+}
+
+func (ts *TgSuber) DownloadSnapshots() []DownloadSnapshot {
+	if ts == nil || ts.downloads == nil {
+		return nil
+	}
+	return ts.downloads.Snapshots()
+}
+
+func (ts *TgSuber) PauseDownload(uid int64) error {
+	if ts == nil || ts.downloads == nil {
+		return ErrDownloadNotFound
+	}
+	return ts.downloads.Pause(uid)
+}
+
+func (ts *TgSuber) ResumeDownload(uid int64) error {
+	if ts == nil || ts.downloads == nil {
+		return ErrDownloadNotFound
+	}
+	return ts.downloads.Resume(uid)
+}
+
+func (ts *TgSuber) DeleteDownload(uid int64) error {
+	if ts == nil || ts.downloads == nil {
+		return ErrDownloadNotFound
+	}
+	return ts.downloads.Delete(uid)
 }
 
 // 清理非法文件名字符

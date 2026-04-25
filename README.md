@@ -6,6 +6,7 @@
 - 不再依赖机器人
 - 不再依赖bot-api-server
 - 支持获取视频、文档、音乐原文件名
+- 支持查看正在下载任务进度，并通过 UID 暂停、继续、删除下载任务
 
 # TG截图
 - 下载视频
@@ -74,6 +75,16 @@ usage: ./build/tgautodown options
 ### 下载保存路径：
 视频、音乐、文档、图片、磁力链、笔记分别保存在`videos`,`music`,`documents`,`photos`,`bt`,`note`目录下。
 
+### 下载控制
+开始下载后，回复消息会包含一个临时 UID，例如 `100`。下载完成、失败或删除后 UID 会被释放。
+
+可在监听频道中发送：
+```
+暂停 100
+继续 100
+删除 100
+```
+
 - 其他
 1. appid和apphash获取：https://core.telegram.org/api/obtaining_api_id
 
@@ -82,19 +93,31 @@ usage: ./build/tgautodown options
 ```
 services:
   tgautodown:
-    image: nasbump/tgautodown:latest
+    image: tgautodown:${TARGETARCH:-arm64}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TARGETOS: linux
+        TARGETARCH: ${TARGETARCH:-arm64}
+    platform: linux/${TARGETARCH:-arm64}
     container_name: tgautodown
     restart: unless-stopped
     environment:
-      - TG_CHANNEL=+AjbQIYhiKlhhNzMx  # 频道名，私有频道的话一定要带上+号
-      - TG_PROXY=socks5://192.168.31.2:7891 # 代理地址，目前只支持socks5代理
-      - TG_F2A=f2apassword  # TG账号开启了两步认证的话，这里需要输入密码
-      - TG_RETRYCNT=10    # 失败时最大重试次数
+      TG_CHANNEL: "+AjbQIYhiKlhhNzMx"  # 频道名，私有频道的话一定要带上+号
+      TG_PROXY: "socks5://192.168.31.2:7891" # 代理地址，目前只支持socks5代理
+      TG_F2A: "f2apassword"  # TG账号开启了两步认证的话，这里需要输入密码
+      TG_RETRYCNT: "10"    # 失败时最大重试次数
     ports:
       - 2020:2020
     volumes:
-      - /mnt/sda1/download:/app/download
-      - /mnt/sda1/data:/app/data
+      - "/mnt/sda1/download:/app/download"
+      - "/mnt/sda1/data:/app/data"
+```
+
+ARM64 设备可直接运行默认配置；如果要构建 amd64 镜像：
+```
+TARGETARCH=amd64 docker compose up -d --build
 ```
 
 

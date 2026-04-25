@@ -5,6 +5,8 @@ const codeForm = document.getElementById('code-form');
 const successContainer = document.getElementById('success-container');
 const errorContainer = document.getElementById('error-container');
 const errorText = document.getElementById('error-text');
+const downloadList = document.getElementById('download-list');
+const downloadEmpty = document.getElementById('download-empty');
 
 // 表单元素
 const userForm = document.getElementById('user-form');
@@ -12,6 +14,7 @@ const codeSubmitForm = document.getElementById('code-submit-form');
 
 // API基础URL
 const API_BASE = window.location.origin;
+let isLoggedIn = false;
 
 // 显示/隐藏元素的辅助函数
 function showElement(element) {
@@ -48,18 +51,23 @@ async function checkStatus() {
         if (data.rtn === 0) {
             switch (data.status) {
                 case 0: // 未登录
+                    isLoggedIn = false;
                     showLoginForm();
                     break;
                 case 1: // 登录中
+                    isLoggedIn = false;
                     showCodeForm();
                     break;
                 case 2: // 登录成功
+                    isLoggedIn = true;
                     showSuccess(data);
                     break;
                 case 3: // 登录失败
+                    isLoggedIn = false;
                     showError('登录失败，请重新尝试');
                     break;
                 default:
+                    isLoggedIn = false;
                     showLoginForm();
             }
         } else {
@@ -72,28 +80,107 @@ async function checkStatus() {
 
 // 显示登录表单
 function showLoginForm() {
+    isLoggedIn = false;
     hideAllContainers();
     showElement(loginForm);
 }
 
 // 显示验证码表单
 function showCodeForm() {
+    isLoggedIn = false;
     hideAllContainers();
     showElement(codeForm);
 }
 
 // 显示成功消息
-function showSuccess(userData) {
+function showSuccess() {
     hideAllContainers();
-    
-    // 更新用户信息显示
-    document.getElementById('user-appid').textContent = userData.appid || '-';
-    document.getElementById('user-apphash').textContent = userData.apphash || '-';
-    document.getElementById('user-phone').textContent = userData.phone || '-';
-    document.getElementById('user-firstname').textContent = userData.firstname || '-';
-    document.getElementById('user-username').textContent = userData.username || '-';
-    
     showElement(successContainer);
+    loadDownloads();
+}
+
+function formatBytes(size) {
+    if (!size) {
+        return '0 B';
+    }
+    if (size >= 1073741824) {
+        return `${(size / 1073741824).toFixed(2)} GB`;
+    }
+    if (size >= 1048576) {
+        return `${(size / 1048576).toFixed(2)} MB`;
+    }
+    if (size >= 1024) {
+        return `${(size / 1024).toFixed(2)} KB`;
+    }
+    return `${size} B`;
+}
+
+function stateText(state) {
+    const states = {
+        queued: '排队中',
+        downloading: '下载中',
+        paused: '已暂停'
+    };
+    return states[state] || state || '-';
+}
+
+function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[char]);
+}
+
+async function loadDownloads() {
+    if (!downloadList || !downloadEmpty) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/tgad/downloads/progress`);
+        const data = await response.json();
+
+        if (data.rtn !== 0) {
+            downloadList.innerHTML = `<div class="download-empty">进度获取失败: ${data.msg}</div>`;
+            downloadEmpty.classList.add('hidden');
+            return;
+        }
+
+        const downloads = data.downloads || [];
+        if (downloads.length === 0) {
+            downloadList.innerHTML = '';
+            downloadEmpty.classList.remove('hidden');
+            return;
+        }
+
+        downloadEmpty.classList.add('hidden');
+        downloadList.innerHTML = downloads.map((item) => {
+            const percent = Math.max(0, Math.min(100, item.percent || 0));
+            const filename = escapeHtml(item.filename || '-');
+            return `
+                <div class="download-item">
+                    <div class="download-meta">
+                        <span class="download-uid">UID ${item.uid}</span>
+                        <span class="download-state">${stateText(item.state)}</span>
+                    </div>
+                    <div class="download-name" title="${filename}">${filename}</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${percent}%"></div>
+                    </div>
+                    <div class="download-size">
+                        <span>${formatBytes(item.downloaded)} / ${formatBytes(item.total)}</span>
+                        <span>${percent}%</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (error) {
+        downloadList.innerHTML = `<div class="download-empty">网络错误: ${error.message}</div>`;
+        downloadEmpty.classList.add('hidden');
+    }
 }
 
 // 提交用户登录信息
@@ -176,8 +263,13 @@ codeSubmitForm.addEventListener('submit', async (e) => {
 document.addEventListener('DOMContentLoaded', () => {
     checkStatus();
     
-    // 每30秒自动检查一次状态（用于登录过程中的状态更新）
-    setInterval(checkStatus, 30000);
+    setInterval(() => {
+        if (isLoggedIn) {
+            loadDownloads();
+        } else {
+            checkStatus();
+        }
+    }, 3000);
 });
 
 // 全局函数，用于重试按钮

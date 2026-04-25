@@ -489,6 +489,7 @@ func (ts *TgSuber) checkSaveRetry(cnt int, beg time.Time) bool {
 type fileSaveMsg struct {
 	ctx      context.Context
 	tgmsg    *TgMsg
+	task     *DownloadTask
 	filename string
 	location tg.InputFileLocationClass
 	done     TgOnSaveDoneHnd
@@ -498,9 +499,11 @@ type fileSaveMsg struct {
 var fileSaveChan = make(chan *fileSaveMsg, 200)
 
 func (ts *TgSuber) fileSaveLocation(ctx context.Context, tgmsg *TgMsg, filename string, location tg.InputFileLocationClass, done TgOnSaveDoneHnd) error {
+	task := ts.downloads.Add(tgmsg, filename)
 	fsm := &fileSaveMsg{
 		ctx:      ctx,
 		tgmsg:    tgmsg,
+		task:     task,
 		filename: filename,
 		location: location,
 		done:     done,
@@ -517,19 +520,28 @@ func (ts *TgSuber) fileSaveLoop(ctx context.Context) {
 			logs.Debug().Msg("fileSaveLoop exit")
 			return
 		case fsm := <-fileSaveChan:
+			if fsm.task.IsDeleted() {
+				if fsm.done != nil {
+					fsm.done(ts, fsm.filename, fsm.tgmsg.msg.ID, fsm.tgmsg, ErrDownloadDeleted)
+				}
+				ts.downloads.Release(fsm.task.UID)
+				continue
+			}
 			err := ts.doFileSaveLocation(fsm.ctx, fsm.tgmsg, fsm.filename, fsm.location)
 			if err != nil {
-				if fsm.retryCnt+1 > ts.MaxSaveRetryCnt {
+				if errors.Is(err, ErrDownloadDeleted) || fsm.retryCnt+1 > ts.MaxSaveRetryCnt {
 					logs.Error(err).Int("msgid", fsm.tgmsg.msg.ID).Str("filename", fsm.filename).
 						Int("retry", fsm.retryCnt).Msg("too many retry times")
 					if fsm.done != nil {
 						fsm.done(ts, fsm.filename, fsm.tgmsg.msg.ID, fsm.tgmsg, err)
 					}
+					ts.downloads.Release(fsm.task.UID)
 					continue
 				}
 				nfsm := &fileSaveMsg{
 					ctx:      context.Background(),
 					tgmsg:    fsm.tgmsg,
+					task:     fsm.task,
 					filename: fsm.filename,
 					location: fsm.location,
 					done:     fsm.done,
@@ -541,16 +553,23 @@ func (ts *TgSuber) fileSaveLoop(ctx context.Context) {
 				if fsm.done != nil {
 					fsm.done(ts, fsm.filename, fsm.tgmsg.msg.ID, fsm.tgmsg, nil)
 				}
+				ts.downloads.Release(fsm.task.UID)
 			}
 		}
 	}
 }
 
 func (ts *TgSuber) doFileSaveLocation(ctx context.Context, tgmsg *TgMsg, filename string, location tg.InputFileLocationClass) error {
+	task, ok := ts.downloads.Get(tgmsg.DownloadUID)
+	if !ok {
+		return ErrDownloadDeleted
+	}
+
 	// 检查文件是否已经存在且完整
 	if finfo, err := os.Stat(filename); err == nil {
 		if finfo.Size() >= tgmsg.FileSize {
 			logs.Debug().Str("file", filename).Int("msgid", tgmsg.msg.ID).Int64("filesize", tgmsg.FileSize).Msg("file already exists and complete")
+			task.SetProgress(tgmsg.FileSize, tgmsg.FileSize)
 			return nil
 		}
 	}
@@ -559,6 +578,7 @@ func (ts *TgSuber) doFileSaveLocation(ctx context.Context, tgmsg *TgMsg, filenam
 	if finfo, err := os.Stat(dlname); err == nil {
 		if finfo.Size() >= tgmsg.FileSize {
 			logs.Debug().Str("file", filename).Int("msgid", tgmsg.msg.ID).Int64("filesize", tgmsg.FileSize).Msg("file already exists and complete")
+			task.SetProgress(tgmsg.FileSize, tgmsg.FileSize)
 			return os.Rename(dlname, filename)
 		}
 	}
@@ -567,7 +587,13 @@ func (ts *TgSuber) doFileSaveLocation(ctx context.Context, tgmsg *TgMsg, filenam
 	if err != nil {
 		return fmt.Errorf("create file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		file.Close()
+		if task.IsDeleted() {
+			_ = os.Remove(dlname)
+			_ = os.Remove(filename)
+		}
+	}()
 
 	// 分块下载
 	const chunkSize = 512 << 10
@@ -575,6 +601,7 @@ func (ts *TgSuber) doFileSaveLocation(ctx context.Context, tgmsg *TgMsg, filenam
 	if finfo, err := file.Stat(); err == nil {
 		offset = finfo.Size()
 	}
+	task.SetProgress(offset, tgmsg.FileSize)
 
 	api := ts.client.API()
 	filesize := tgmsg.FileSize
@@ -584,6 +611,13 @@ func (ts *TgSuber) doFileSaveLocation(ctx context.Context, tgmsg *TgMsg, filenam
 	logs.Debug().Str("file", filename).Int("msgid", tgmsg.msg.ID).Int64("filesize", filesize).Msg("save beg")
 
 	for {
+		if err := task.WaitIfPaused(ctx); err != nil {
+			return err
+		}
+		if err := task.SetDownloading(); err != nil {
+			return err
+		}
+
 		// 请求文件分片
 		part, err := api.UploadGetFile(ctx, &tg.UploadGetFileRequest{
 			Location: location,
@@ -631,6 +665,7 @@ func (ts *TgSuber) doFileSaveLocation(ctx context.Context, tgmsg *TgMsg, filenam
 			}
 
 			offset += int64(wsize)
+			task.SetProgress(offset, filesize)
 
 			logs.Debug().Str("file", filename).Str("dl.progress", calcDlProgress(offset, filesize)).Send()
 
@@ -646,6 +681,9 @@ func (ts *TgSuber) doFileSaveLocation(ctx context.Context, tgmsg *TgMsg, filenam
 }
 
 func calcDlProgress(dl, tot int64) string {
+	if tot <= 0 {
+		return fmt.Sprintf("%d/0=0.00%%", dl)
+	}
 	percent := float64(dl) * 100 / float64(tot)
 	return fmt.Sprintf("%d/%d=%.2f%%", dl, tot, percent)
 }

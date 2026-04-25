@@ -42,6 +42,7 @@ func StartHttpSrv(embeddedStaticFiles embed.FS, addr string) error {
 	http.HandleFunc("/tgad/login/status", HandleLoginStatus)
 	http.HandleFunc("/tgad/login/user", HandleLoginUser)
 	http.HandleFunc("/tgad/login/code", HandleLoginCode)
+	http.HandleFunc("/tgad/downloads/progress", HandleDownloadsProgress)
 	http.HandleFunc("/tgad/channels/list", HandleChannelsList)
 	http.HandleFunc("/tgad/channels/modify", HandleChannelsModify)
 

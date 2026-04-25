@@ -1,0 +1,22 @@
+services:
+  tgautodown:
+    image: tgautodown:${TARGETARCH:-arm64}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TARGETOS: linux
+        TARGETARCH: ${TARGETARCH:-arm64}
+    platform: linux/${TARGETARCH:-arm64}
+    container_name: tgautodown
+    restart: unless-stopped
+    environment:
+      TG_CHANNEL: "${TG_CHANNEL:-+AjbQIYhiKlhhNzMx}"
+      TG_PROXY: "${TG_PROXY:-}"
+      TG_F2A: "${TG_F2A:-}"
+      TG_RETRYCNT: "${TG_RETRYCNT:-10}"
+    ports:
+      - "2020:2020"
+    volumes:
+      - "${TG_DOWNLOAD_DIR:-./download}:/app/download"
+      - "${TG_DATA_DIR:-./data}:/app/data"
