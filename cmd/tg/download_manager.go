@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -53,7 +52,8 @@ type DownloadTask struct {
 }
 
 type DownloadManager struct {
-	next  atomic.Int64
+	next  int64
+	free  []int64
 	mu    sync.RWMutex
 	tasks map[int64]*DownloadTask
 }
@@ -61,13 +61,16 @@ type DownloadManager struct {
 func NewDownloadManager() *DownloadManager {
 	dm := &DownloadManager{
 		tasks: map[int64]*DownloadTask{},
+		next:  99,
 	}
-	dm.next.Store(99)
 	return dm
 }
 
 func (dm *DownloadManager) Add(tgmsg *TgMsg, savePath string) *DownloadTask {
-	uid := dm.next.Add(1)
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+
+	uid := dm.allocUIDLocked()
 	task := &DownloadTask{
 		UID:       uid,
 		MsgID:     tgmsg.msg.ID,
@@ -79,17 +82,35 @@ func (dm *DownloadManager) Add(tgmsg *TgMsg, savePath string) *DownloadTask {
 		total:     tgmsg.FileSize,
 	}
 
-	dm.mu.Lock()
 	dm.tasks[uid] = task
-	dm.mu.Unlock()
-
 	tgmsg.DownloadUID = uid
 	return task
 }
 
+func (dm *DownloadManager) allocUIDLocked() int64 {
+	if len(dm.free) == 0 {
+		dm.next++
+		return dm.next
+	}
+
+	minIdx := 0
+	for i := 1; i < len(dm.free); i++ {
+		if dm.free[i] < dm.free[minIdx] {
+			minIdx = i
+		}
+	}
+
+	uid := dm.free[minIdx]
+	dm.free = append(dm.free[:minIdx], dm.free[minIdx+1:]...)
+	return uid
+}
+
 func (dm *DownloadManager) Release(uid int64) {
 	dm.mu.Lock()
-	delete(dm.tasks, uid)
+	if _, ok := dm.tasks[uid]; ok {
+		delete(dm.tasks, uid)
+		dm.free = append(dm.free, uid)
+	}
 	dm.mu.Unlock()
 }
 
