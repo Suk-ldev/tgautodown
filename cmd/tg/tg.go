@@ -29,8 +29,7 @@ func (ts *TgSuber) run(ctx context.Context, names []string) error {
 	cs := ts.getChannels(ctx, names)
 	if len(cs) == 0 {
 		logs.Error(nil).Msg("no channels need subscribe")
-		<-ts.gctx.Done()
-		return ts.gctx.Err()
+		return ErrNoSubscribeChannels
 	}
 	ts.scis = cs
 
@@ -81,6 +80,9 @@ func (ts *TgSuber) getChannels(ctx context.Context, names []string) map[int64]Su
 			invite, err := api.MessagesCheckChatInvite(ctx, after)
 			if err != nil {
 				logs.Warn(err).Str("name", name).Msg("check invite fail")
+				if strings.Contains(err.Error(), "FLOOD_WAIT") {
+					ts.status = TgstatusLogOk
+				}
 				continue
 			}
 			switch inv := invite.(type) {

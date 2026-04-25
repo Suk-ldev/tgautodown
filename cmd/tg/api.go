@@ -28,10 +28,12 @@ const (
 )
 
 var (
-	ErrMsgClsUnsupport = errors.New("msgcls unsupport")
-	ErrNoLoginCodeHnd  = errors.New("no login code handle")
-	ErrNoF2APassword   = errors.New("no F2A passwd")
-	ErrClientNotAuth   = errors.New("client not Authorized")
+	ErrMsgClsUnsupport       = errors.New("msgcls unsupport")
+	ErrNoLoginCodeHnd        = errors.New("no login code handle")
+	ErrNoF2APassword         = errors.New("no F2A passwd")
+	ErrClientNotAuth         = errors.New("client not Authorized")
+	ErrNoSubscribeChannels   = errors.New("no channels need subscribe")
+	ErrChannelSubscribeDelay = errors.New("channel subscribe need retry later")
 )
 
 const (
@@ -214,6 +216,11 @@ func (ts *TgSuber) Run(names []string) error {
 		})
 
 		ts.gctxCancel()
+		if errors.Is(err, ErrNoSubscribeChannels) || errors.Is(err, ErrChannelSubscribeDelay) {
+			logs.Warn(err).Msg("subscribe channel fail, retry later...")
+			<-time.After(time.Minute * 60)
+			continue
+		}
 		logs.Warn(err).Msg("run fail, retry...")
 		<-time.After(time.Second * 5)
 	}
