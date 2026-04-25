@@ -101,7 +101,7 @@ func doDownload(ts *tg.TgSuber, mtype tg.TgMsgClass, msgid int, tgmsg *tg.TgMsg)
 		return ts.ReplyTo(tgmsg, replyMsg)
 	}
 
-	replyMsg := fmt.Sprintf("正在下载%s: %s\n- UID: %d\n- 文件大小: %s\n- 消息ID: %d\n- 暂停请输入: 暂停 %d\n- 删除正在下载视频请输入: 删除 %d\n- 继续请输入: 继续 %d",
+	replyMsg := fmt.Sprintf("正在下载%s: %s\n- UID: %d\n- 文件大小: %s\n- 消息ID: %d\n- 暂停请输入: 暂停 %d\n- 删除正在下载内容请输入: 删除 %d\n- 继续请输入: 继续 %d",
 		mtDesc, tgmsg.FileName, tgmsg.DownloadUID, sizeInt2Readable(tgmsg.FileSize), msgid,
 		tgmsg.DownloadUID, tgmsg.DownloadUID, tgmsg.DownloadUID)
 	logs.Debug().Msg(replyMsg)
