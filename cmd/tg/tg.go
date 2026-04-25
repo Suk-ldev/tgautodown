@@ -85,34 +85,16 @@ func (ts *TgSuber) getChannels(ctx context.Context, names []string) map[int64]Su
 			}
 			switch inv := invite.(type) {
 			case *tg.ChatInviteAlready:
-				if ch, ok := inv.Chat.(*tg.Channel); ok {
-					sci := SubChannelInfo{
-						Name:       after, // ch.Username, // 私有频道没有username
-						Title:      ch.Title,
-						ChannelID:  ch.ID,
-						AccessHash: ch.AccessHash,
-						chType:     ChChannel,
-					}
-					cs[ch.ID] = sci
-					logs.Info().Str("name", name).Int64("id", sci.ChannelID).Int64("hash", sci.AccessHash).Str("title", sci.Title).Msg("private channel")
-				} else if ch, ok := inv.Chat.(*tg.Chat); ok {
-					sci := SubChannelInfo{
-						Name:      after, // ch.Username, // 私有频道没有username
-						Title:     ch.Title,
-						ChannelID: ch.ID,
-						chType:    ChGroup,
-					}
-					cs[ch.ID] = sci
-					logs.Info().Str("name", name).Int64("id", sci.ChannelID).Str("title", sci.Title).Msg("private group")
-				} else {
-					logs.Warn(nil).Str("name", name).Str("invite.type", inv.TypeName()).
-						Str("chat.type", inv.Chat.TypeName()).Msg("unknown chat")
-				}
+				ts.addSubChat(cs, name, after, inv.Chat)
 			case *tg.ChatInvite: // 未加入，需要调用 MessagesImportChatInvite 加入
-				// joined, _ := api.MessagesImportChatInvite(ctx, name)
-				logs.Warn(nil).Str("name", name).Str("invite.type", inv.TypeName()).
-					Bool("Channel", inv.Channel).
-					Bool("Public", inv.Public).Msg("not in channel")
+				joined, err := api.MessagesImportChatInvite(ctx, after)
+				if err != nil {
+					logs.Warn(err).Str("name", name).Str("invite.type", inv.TypeName()).
+						Bool("Channel", inv.Channel).
+						Bool("Public", inv.Public).Msg("join private invite fail")
+					continue
+				}
+				ts.addJoinedChats(cs, name, after, joined)
 			default:
 				logs.Warn(nil).Str("name", name).Str("invite.type", inv.TypeName()).Msg("unknown invite")
 			}
@@ -152,6 +134,50 @@ func (ts *TgSuber) getChannels(ctx context.Context, names []string) map[int64]Su
 		}
 	}
 	return cs
+}
+
+func (ts *TgSuber) addJoinedChats(cs map[int64]SubChannelInfo, name, after string, joined tg.UpdatesClass) {
+	switch upd := joined.(type) {
+	case *tg.Updates:
+		for _, ch := range upd.Chats {
+			ts.addSubChat(cs, name, after, ch)
+		}
+	case *tg.UpdatesCombined:
+		for _, ch := range upd.Chats {
+			ts.addSubChat(cs, name, after, ch)
+		}
+	default:
+		logs.Warn(nil).Str("name", name).Str("updates.type", joined.TypeName()).Msg("unknown import invite result")
+	}
+}
+
+func (ts *TgSuber) addSubChat(cs map[int64]SubChannelInfo, name, after string, chat tg.ChatClass) {
+	if ch, ok := chat.(*tg.Channel); ok {
+		sci := SubChannelInfo{
+			Name:       after, // 私有频道没有 username
+			Title:      ch.Title,
+			ChannelID:  ch.ID,
+			AccessHash: ch.AccessHash,
+			chType:     ChChannel,
+		}
+		cs[ch.ID] = sci
+		logs.Info().Str("name", name).Int64("id", sci.ChannelID).Int64("hash", sci.AccessHash).Str("title", sci.Title).Msg("private channel")
+		return
+	}
+
+	if ch, ok := chat.(*tg.Chat); ok {
+		sci := SubChannelInfo{
+			Name:      after, // 私有群没有 username
+			Title:     ch.Title,
+			ChannelID: ch.ID,
+			chType:    ChGroup,
+		}
+		cs[ch.ID] = sci
+		logs.Info().Str("name", name).Int64("id", sci.ChannelID).Str("title", sci.Title).Msg("private group")
+		return
+	}
+
+	logs.Warn(nil).Str("name", name).Str("chat.type", chat.TypeName()).Msg("unknown chat")
 }
 
 func (ts *TgSuber) recvHistoryMsg(ctx context.Context, sci *SubChannelInfo) {
