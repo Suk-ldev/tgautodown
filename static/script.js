@@ -15,6 +15,33 @@ const codeSubmitForm = document.getElementById('code-submit-form');
 // API基础URL
 const API_BASE = window.location.origin;
 let isLoggedIn = false;
+let currentView = '';
+let statusPollTimer = null;
+let progressPollTimer = null;
+
+function stopStatusPolling() {
+    if (statusPollTimer) {
+        clearInterval(statusPollTimer);
+        statusPollTimer = null;
+    }
+}
+
+function stopProgressPolling() {
+    if (progressPollTimer) {
+        clearInterval(progressPollTimer);
+        progressPollTimer = null;
+    }
+}
+
+function startStatusPolling() {
+    stopStatusPolling();
+    statusPollTimer = setInterval(() => checkStatus({ showLoading: false }), 2000);
+}
+
+function startProgressPolling() {
+    stopProgressPolling();
+    progressPollTimer = setInterval(loadDownloads, 8000);
+}
 
 // 显示/隐藏元素的辅助函数
 function showElement(element) {
@@ -29,6 +56,9 @@ function hideElement(element) {
 
 // 显示错误信息
 function showError(message) {
+    stopStatusPolling();
+    stopProgressPolling();
+    currentView = 'error';
     errorText.textContent = message;
     hideAllContainers();
     showElement(errorContainer);
@@ -40,9 +70,13 @@ function hideAllContainers() {
 }
 
 // 检查登录状态
-async function checkStatus() {
-    hideAllContainers();
-    showElement(statusContainer);
+async function checkStatus(options = {}) {
+    const showLoading = options.showLoading !== false;
+    if (showLoading) {
+        hideAllContainers();
+        showElement(statusContainer);
+        currentView = 'status';
+    }
 
     try {
         const response = await fetch(`${API_BASE}/tgad/login/status`);
@@ -81,6 +115,12 @@ async function checkStatus() {
 // 显示登录表单
 function showLoginForm() {
     isLoggedIn = false;
+    stopStatusPolling();
+    stopProgressPolling();
+    if (currentView === 'login') {
+        return;
+    }
+    currentView = 'login';
     hideAllContainers();
     showElement(loginForm);
 }
@@ -88,15 +128,28 @@ function showLoginForm() {
 // 显示验证码表单
 function showCodeForm() {
     isLoggedIn = false;
+    stopProgressPolling();
+    if (currentView === 'code') {
+        return;
+    }
+    currentView = 'code';
     hideAllContainers();
     showElement(codeForm);
 }
 
 // 显示成功消息
 function showSuccess() {
+    isLoggedIn = true;
+    stopStatusPolling();
+    if (currentView === 'success') {
+        loadDownloads();
+        return;
+    }
+    currentView = 'success';
     hideAllContainers();
     showElement(successContainer);
     loadDownloads();
+    startProgressPolling();
 }
 
 function formatBytes(size) {
@@ -227,7 +280,10 @@ async function submitCode(code) {
 
         if (data.rtn === 0) {
             // 验证码提交成功，等待登录完成
-            setTimeout(checkStatus, 2000);
+            statusContainer.innerHTML = '<div class="loading">正在验证登录状态...</div>';
+            currentView = 'status';
+            setTimeout(() => checkStatus({ showLoading: false }), 1500);
+            startStatusPolling();
         } else {
             showError(`验证码提交失败: ${data.msg}`);
         }
@@ -262,15 +318,8 @@ codeSubmitForm.addEventListener('submit', async (e) => {
 // 页面加载时检查状态
 document.addEventListener('DOMContentLoaded', () => {
     checkStatus();
-    
-    setInterval(() => {
-        if (isLoggedIn) {
-            loadDownloads();
-        } else {
-            checkStatus();
-        }
-    }, 3000);
 });
 
 // 全局函数，用于重试按钮
 window.checkStatus = checkStatus;
+window.loadDownloads = loadDownloads;

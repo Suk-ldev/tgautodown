@@ -29,7 +29,8 @@ func (ts *TgSuber) run(ctx context.Context, names []string) error {
 	cs := ts.getChannels(ctx, names)
 	if len(cs) == 0 {
 		logs.Error(nil).Msg("no channels need subscribe")
-		return nil
+		<-ts.gctx.Done()
+		return ts.gctx.Err()
 	}
 	ts.scis = cs
 
