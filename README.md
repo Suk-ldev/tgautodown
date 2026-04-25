@@ -30,7 +30,7 @@
 # 编译安装
 项目纯go实现，直接拉代码编译：
 ```
-git clone https://github.com/nasbump/tgautodown.git
+git clone https://github.com/Suk-ldev/tgautodown.git
 cd tgautodown
 go build
 ```
@@ -44,8 +44,8 @@ usage: ./build/tgautodown options
   -proxy   ## socks5代理地址: 127.0.0.1:1080
   -f2a     ## TG账号开启了两步认证的话，这里需要输入密码
   -retrycnt 10  ## 失败时最大重试次数
-  -names   ## 频道名，支持公开频道和私有频道
-           ## 可以传多个频道，以,号隔; 如 -names abc,+def 这表示接收公共频道abc和私有频道+def中的消息
+  -names   ## 频道名，支持公开频道用户名和私有邀请链接hash，不支持直接填写频道ID
+           ## 可以传多个频道，以,号隔; 如 -names abc,+def 这表示接收公开频道abc和私有邀请链接 https://t.me/+def 中的消息
            ## 建议使用自建的私有频道，减少噪音
 ```
 - 配置文件示例
@@ -66,6 +66,13 @@ usage: ./build/tgautodown options
   -cfg /app/data/config.json \
   -names +AjbQIYhiKlhhNzMx  
 ```
+
+### 频道配置说明
+- 公开频道或公开群：填写用户名，例如 `my_public_channel`，不要带 `https://t.me/`。
+- 私有频道或私有群：填写邀请链接中的 `+hash`，例如邀请链接是 `https://t.me/+AjbQIYhiKlhhNzMx`，则填写 `+AjbQIYhiKlhhNzMx`。
+- 当前不支持直接填写频道 ID。
+- 如果账号尚未加入私有频道或私有群，程序会尝试使用邀请链接自动加入；也可以先在 Telegram 官方客户端里手动加入，再启动程序。
+- 如果日志出现 `FLOOD_WAIT (xxxx)`，表示 Telegram 已限制该账号继续请求，需要等待括号中的秒数后再试。频繁重启或反复检查邀请链接会延长等待体验。
 
 ### 首次启动需要登陆TG
 - 浏览器打开： http://<IP>:2020
@@ -89,7 +96,26 @@ usage: ./build/tgautodown options
 1. appid和apphash获取：https://core.telegram.org/api/obtaining_api_id
 
 # docker启动
-- docker-compose:
+先拉取项目：
+```
+git clone https://github.com/Suk-ldev/tgautodown.git
+cd tgautodown
+```
+
+编辑 `docker-compose.yml`：
+```
+nano docker-compose.yml
+```
+
+需要重点修改这些字段：
+- `TG_CHANNEL`：要监听的频道或群。公开频道填用户名，例如 `my_public_channel`；私有频道填邀请链接中的 `+hash`，例如 `+AjbQIYhiKlhhNzMx`。
+- `TG_PROXY`：Telegram 访问代理。如果服务器可以直接访问 Telegram，可留空为 `""`；如果需要代理，填写 `socks5://IP:端口`。
+- `TG_F2A`：Telegram 两步验证密码。没有开启两步验证就留空为 `""`。
+- `TG_RETRYCNT`：下载失败时的重试次数，一般保持 `"10"`。
+- `ports`：默认把容器的 `2020` 映射到宿主机 `2020`，如需改端口可写成 `"宿主机端口:2020"`。
+- `volumes`：左边是宿主机目录，右边是容器目录。通常只改左边，例如把 `/mnt/sda1/download` 改成你的下载目录。
+
+示例 `docker-compose.yml`：
 ```
 services:
   tgautodown:
@@ -115,9 +141,27 @@ services:
       - "/mnt/sda1/data:/app/data"
 ```
 
+修改完后启动：
+```
+docker compose up -d --build
+```
+
 ARM64 设备可直接运行默认配置；如果要构建 amd64 镜像：
 ```
 TARGETARCH=amd64 docker compose up -d --build
+```
+
+如需强制重新构建镜像：
+```
+docker compose down --rmi local
+docker compose build --no-cache --pull
+docker compose up -d --force-recreate
+```
+
+如果是 ARM64 环境：
+```
+TARGETARCH=arm64 docker compose build --no-cache --pull
+TARGETARCH=arm64 docker compose up -d --force-recreate
 ```
 
 
