@@ -550,10 +550,10 @@ func (ts *TgSuber) fileSaveLoop(ctx context.Context) {
 			return
 		case fsm := <-fileSaveChan:
 			if fsm.task.IsDeleted() {
+				ts.downloads.Release(fsm.task.UID)
 				if fsm.done != nil {
 					fsm.done(ts, fsm.filename, fsm.tgmsg.msg.ID, fsm.tgmsg, ErrDownloadDeleted)
 				}
-				ts.downloads.Release(fsm.task.UID)
 				continue
 			}
 			err := ts.doFileSaveLocation(fsm.ctx, fsm.tgmsg, fsm.filename, fsm.location)
@@ -561,10 +561,10 @@ func (ts *TgSuber) fileSaveLoop(ctx context.Context) {
 				if errors.Is(err, ErrDownloadDeleted) || fsm.retryCnt+1 > ts.MaxSaveRetryCnt {
 					logs.Error(err).Int("msgid", fsm.tgmsg.msg.ID).Str("filename", fsm.filename).
 						Int("retry", fsm.retryCnt).Msg("too many retry times")
+					ts.downloads.Release(fsm.task.UID)
 					if fsm.done != nil {
 						fsm.done(ts, fsm.filename, fsm.tgmsg.msg.ID, fsm.tgmsg, err)
 					}
-					ts.downloads.Release(fsm.task.UID)
 					continue
 				}
 				nfsm := &fileSaveMsg{
@@ -579,10 +579,10 @@ func (ts *TgSuber) fileSaveLoop(ctx context.Context) {
 				fileSaveChan <- nfsm
 			} else {
 				logs.Trace().Int("msgid", fsm.tgmsg.msg.ID).Str("filename", fsm.filename).Msg("file save ok")
+				ts.downloads.Release(fsm.task.UID)
 				if fsm.done != nil {
 					fsm.done(ts, fsm.filename, fsm.tgmsg.msg.ID, fsm.tgmsg, nil)
 				}
-				ts.downloads.Release(fsm.task.UID)
 			}
 		}
 	}

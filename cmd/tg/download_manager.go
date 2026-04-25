@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"sync"
+	"tgautodown/internal/logs"
 	"time"
 )
 
@@ -84,6 +85,7 @@ func (dm *DownloadManager) Add(tgmsg *TgMsg, savePath string) *DownloadTask {
 
 	dm.tasks[uid] = task
 	tgmsg.DownloadUID = uid
+	logs.Debug().Int64("uid", uid).Int("msgid", tgmsg.msg.ID).Str("filename", tgmsg.FileName).Msg("download uid alloc")
 	return task
 }
 
@@ -110,6 +112,7 @@ func (dm *DownloadManager) Release(uid int64) {
 	if _, ok := dm.tasks[uid]; ok {
 		delete(dm.tasks, uid)
 		dm.free = append(dm.free, uid)
+		logs.Debug().Int64("uid", uid).Msg("download uid release")
 	}
 	dm.mu.Unlock()
 }
