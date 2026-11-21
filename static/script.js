@@ -18,6 +18,7 @@ let isLoggedIn = false;
 let currentView = '';
 let statusPollTimer = null;
 let progressPollTimer = null;
+let loginMode = 'user';
 
 function stopStatusPolling() {
     if (statusPollTimer) {
@@ -110,6 +111,16 @@ async function checkStatus(options = {}) {
     } catch (error) {
         showError(`网络错误: ${error.message}`);
     }
+}
+
+// 切换登录方式：手机号 / Bot Token
+function switchLoginMode(mode) {
+    loginMode = mode;
+    document.getElementById('tab-user').classList.toggle('active', mode === 'user');
+    document.getElementById('tab-bot').classList.toggle('active', mode === 'bot');
+    document.getElementById('phone-group').classList.toggle('hidden', mode !== 'user');
+    document.getElementById('bottoken-group').classList.toggle('hidden', mode !== 'bot');
+    document.getElementById('botchannels-group').classList.toggle('hidden', mode !== 'bot');
 }
 
 // 显示登录表单
@@ -253,7 +264,14 @@ async function submitUserInfo(userData) {
         const data = await response.json();
 
         if (data.rtn === 0) {
-            showCodeForm();
+            if (loginMode === 'bot') {
+                // Bot 模式无需验证码，直接轮询登录状态
+                statusContainer.innerHTML = '<div class="loading">正在登录 Bot...</div>';
+                currentView = 'status';
+                startStatusPolling();
+            } else {
+                showCodeForm();
+            }
         } else {
             showError(`提交失败: ${data.msg}`);
         }
@@ -295,13 +313,27 @@ async function submitCode(code) {
 // 事件监听器
 userForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    
+
     const formData = new FormData(userForm);
     const userData = {
         appid: parseInt(formData.get('appid')),
-        apphash: formData.get('apphash'),
-        phone: formData.get('phone')
+        apphash: formData.get('apphash')
     };
+
+    if (loginMode === 'bot') {
+        userData.bottoken = (formData.get('bottoken') || '').trim();
+        if (!userData.bottoken) {
+            alert('请输入 Bot Token');
+            return;
+        }
+        userData.botchannels = (formData.get('botchannels') || '').trim();
+    } else {
+        userData.phone = (formData.get('phone') || '').trim();
+        if (!userData.phone) {
+            alert('请输入手机号');
+            return;
+        }
+    }
 
     await submitUserInfo(userData);
 });
@@ -323,3 +355,5 @@ document.addEventListener('DOMContentLoaded', () => {
 // 全局函数，用于重试按钮
 window.checkStatus = checkStatus;
 window.loadDownloads = loadDownloads;
+window.switchLoginMode = switchLoginMode;
+window.showLoginForm = showLoginForm;

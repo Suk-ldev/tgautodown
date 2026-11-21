@@ -27,11 +27,13 @@ func (ts *TgSuber) run(ctx context.Context, names []string) error {
 		Str("phone", ts.UserPhone).Int("appid", ts.AppID).Msg("ready")
 
 	cs := ts.getChannels(ctx, names)
-	if len(cs) == 0 {
+	if ts.BotToken == "" && len(cs) == 0 {
 		logs.Error(nil).Msg("no channels need subscribe")
 		return ErrNoSubscribeChannels
 	}
+	ts.scisMu.Lock()
 	ts.scis = cs
+	ts.scisMu.Unlock()
 
 	if ts.GetHistoryCnt > 0 {
 		for _, sci := range cs {
@@ -44,13 +46,27 @@ func (ts *TgSuber) run(ctx context.Context, names []string) error {
 }
 
 func (ts *TgSuber) login(ctx context.Context) error {
-	flow := auth.NewFlow(ts, auth.SendCodeOptions{})
-
-	tsca := ts.client.Auth()
-
-	if err := tsca.IfNecessary(ctx, flow); err != nil {
-		logs.Error(err).Msg("login failed")
-		return err
+	if ts.BotToken != "" {
+		// Bot 模式：用 bot token 登录，无需手机号+验证码
+		status, err := ts.client.Auth().Status(ctx)
+		if err != nil {
+			logs.Error(err).Msg("auth status fail")
+			return err
+		}
+		if !status.Authorized {
+			if _, err := ts.client.Auth().Bot(ctx, ts.BotToken); err != nil {
+				logs.Error(err).Msg("bot login failed")
+				return err
+			}
+			logs.Info().Msg("bot login ok")
+		}
+	} else {
+		flow := auth.NewFlow(ts, auth.SendCodeOptions{})
+		tsca := ts.client.Auth()
+		if err := tsca.IfNecessary(ctx, flow); err != nil {
+			logs.Error(err).Msg("login failed")
+			return err
+		}
 	}
 
 	self, err := ts.client.Self(ctx)
@@ -72,6 +88,12 @@ func (ts *TgSuber) login(ctx context.Context) error {
 }
 
 func (ts *TgSuber) getChannels(ctx context.Context, names []string) map[int64]SubChannelInfo {
+	if ts.BotToken != "" {
+		// Bot 模式：不能枚举/解析频道（getDialogs/checkInvite 对 bot 都返回 BOT_METHOD_INVALID），
+		// 频道信息改为在收到 updates 时动态提取（updater.go 的 mergeBotChats）
+		return map[int64]SubChannelInfo{}
+	}
+
 	cs := map[int64]SubChannelInfo{}
 
 	api := ts.client.API()

@@ -2,6 +2,7 @@ package tg
 
 import (
 	"context"
+	"strconv"
 	"tgautodown/internal/logs"
 
 	"github.com/gotd/td/tg"
@@ -11,11 +12,13 @@ func (ts *TgSuber) Handle(ctx context.Context, u tg.UpdatesClass) error {
 	switch upd := u.(type) {
 	case *tg.Updates:
 		// 常见容器：Updates 包含多个 UpdateClass
+		ts.mergeBotChats(upd.Chats)
 		for _, up := range upd.Updates {
 			ts.handleSingleUpdate(ctx, up)
 		}
 	case *tg.UpdatesCombined:
 		// UpdatesCombined 同样包含 Updates 列表
+		ts.mergeBotChats(upd.Chats)
 		for _, up := range upd.Updates {
 			ts.handleSingleUpdate(ctx, up)
 		}
@@ -32,6 +35,68 @@ func (ts *TgSuber) Handle(ctx context.Context, u tg.UpdatesClass) error {
 		logs.Warn(nil).Str("upd", upd.TypeName()).Msg("unknown update class")
 	}
 	return nil
+}
+
+// mergeBotChats 从 updates 容器里提取频道/群信息，动态补全 scis（bot 模式无法预枚举频道）
+func (ts *TgSuber) mergeBotChats(chats []tg.ChatClass) {
+	if len(chats) == 0 {
+		return
+	}
+	for _, chat := range chats {
+		switch c := chat.(type) {
+		case *tg.Channel:
+			if !ts.matchBotChannel(c.Title, c.ID) {
+				continue
+			}
+			ts.scisMu.Lock()
+			if ts.scis == nil {
+				ts.scis = map[int64]SubChannelInfo{}
+			}
+			if _, ok := ts.scis[c.ID]; !ok {
+				ts.scis[c.ID] = SubChannelInfo{
+					Name:       c.Username,
+					Title:      c.Title,
+					ChannelID:  c.ID,
+					AccessHash: c.AccessHash,
+					chType:     ChChannel,
+				}
+				logs.Info().Int64("id", c.ID).Str("title", c.Title).Str("username", c.Username).Msg("bot discover channel")
+			}
+			ts.scisMu.Unlock()
+		case *tg.Chat:
+			if !ts.matchBotChannel(c.Title, c.ID) {
+				continue
+			}
+			ts.scisMu.Lock()
+			if ts.scis == nil {
+				ts.scis = map[int64]SubChannelInfo{}
+			}
+			if _, ok := ts.scis[c.ID]; !ok {
+				ts.scis[c.ID] = SubChannelInfo{
+					Name:      c.Title,
+					Title:     c.Title,
+					ChannelID: c.ID,
+					chType:    ChGroup,
+				}
+				logs.Info().Int64("id", c.ID).Str("title", c.Title).Msg("bot discover group")
+			}
+			ts.scisMu.Unlock()
+		}
+	}
+}
+
+// matchBotChannel 判断频道是否在 bot 监听过滤列表里；空列表表示监听全部
+func (ts *TgSuber) matchBotChannel(title string, id int64) bool {
+	if len(ts.BotChannels) == 0 {
+		return true
+	}
+	idStr := strconv.FormatInt(id, 10)
+	for _, c := range ts.BotChannels {
+		if c == title || c == idStr {
+			return true
+		}
+	}
+	return false
 }
 
 func (ts *TgSuber) handleSingleUpdate(ctx context.Context, up tg.UpdateClass) {
@@ -87,6 +152,8 @@ func (ts *TgSuber) getSubChannel(peer tg.PeerClass) *SubChannelInfo {
 		return nil
 	}
 
+	ts.scisMu.Lock()
+	defer ts.scisMu.Unlock()
 	if ts.scis != nil {
 		if sci, ok := ts.scis[chid]; ok {
 			return &sci

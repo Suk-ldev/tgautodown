@@ -15,7 +15,12 @@ func (a *TgSuber) Phone(_ context.Context) (string, error) {
 	return a.UserPhone, nil
 }
 
-func (a *TgSuber) Code(_ context.Context, _ *tg.AuthSentCode) (string, error) {
+func (a *TgSuber) Code(_ context.Context, sentCode *tg.AuthSentCode) (string, error) {
+	if sentCode != nil && sentCode.Type != nil {
+		logs.Info().Str("code.type", sentCode.Type.TypeName()).
+			Str("code.hash", sentCode.PhoneCodeHash).
+			Msg("sent code ok, waiting input")
+	}
 	f := a.getLoginCode
 	if f == nil {
 		logs.Warn(ErrNoLoginCodeHnd).Send()

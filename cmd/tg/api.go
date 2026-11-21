@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"tgautodown/internal/logs"
 	"time"
 
@@ -55,6 +56,8 @@ type TgSuber struct {
 	AppID               int
 	AppHash             string
 	UserPhone           string
+	BotToken            string
+	BotChannels         []string
 	SessionPath         string
 	Socks5Proxy         string
 	F2APassword         string
@@ -69,6 +72,7 @@ type TgSuber struct {
 	client       *telegram.Client
 	getLoginCode TgLoginCodeHnd
 	scis         map[int64]SubChannelInfo
+	scisMu       sync.Mutex
 	mhnds        map[TgMsgClass]TgMsgHnd
 	downloads    *DownloadManager
 	status       int
@@ -119,6 +123,14 @@ func (ts *TgSuber) WithSession(path, f2apwd string, hnd TgLoginCodeHnd) *TgSuber
 	ts.SessionPath = path
 	ts.F2APassword = f2apwd
 	ts.getLoginCode = hnd
+	return ts
+}
+func (ts *TgSuber) WithBotToken(token string) *TgSuber {
+	ts.BotToken = token
+	return ts
+}
+func (ts *TgSuber) WithBotChannels(chans []string) *TgSuber {
+	ts.BotChannels = chans
 	return ts
 }
 func (ts *TgSuber) EnableTGLogger() *TgSuber {

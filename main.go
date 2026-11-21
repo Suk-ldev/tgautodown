@@ -12,7 +12,8 @@ var embeddedStaticFiles embed.FS
 func main() {
 	logic.ParseCfg()
 
-	if logic.TGCfg.AppID > 0 && logic.TGCfg.AppHash != "" && logic.TGCfg.Phone != "" {
+	if logic.TGCfg.AppID > 0 && logic.TGCfg.AppHash != "" &&
+		(logic.TGCfg.Phone != "" || logic.TGCfg.BotToken != "") {
 		go logic.TgSuberStart()
 	}
 

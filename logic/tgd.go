@@ -24,11 +24,24 @@ var namesMap = map[tg.TgMsgClass][]string{
 }
 
 func TgSuberStart() {
-	Tgs = tg.NewTG(TGCfg.AppID, TGCfg.AppHash, TGCfg.Phone).
+	t := tg.NewTG(TGCfg.AppID, TGCfg.AppHash, TGCfg.Phone).
 		WithSocks5Proxy(TGCfg.socks5).
 		WithRetryRule(TGCfg.maxSaveRetryCnt, TGCfg.maxSaveRetrySecond).
 		WithSession(TGCfg.sessionPath, TGCfg.f2apwd, waitLoginCode)
-		// WithHistoryMsgCnt(16).
+	if TGCfg.BotToken != "" {
+		t = t.WithBotToken(TGCfg.BotToken)
+		if TGCfg.BotChannels != "" {
+			chans := []string{}
+			for _, c := range strings.Split(TGCfg.BotChannels, ",") {
+				if c = strings.TrimSpace(c); c != "" {
+					chans = append(chans, c)
+				}
+			}
+			t = t.WithBotChannels(chans)
+		}
+	}
+	Tgs = t
+	// WithHistoryMsgCnt(16).
 
 	Tgs.WithMsgHandle(tg.TgAudio, func(msgid int, tgmsg *tg.TgMsg) error {
 		return doDownload(Tgs, tg.TgAudio, msgid, tgmsg)

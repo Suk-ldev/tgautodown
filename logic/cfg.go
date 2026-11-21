@@ -13,6 +13,8 @@ type TgLogicConfig struct {
 	AppID    int    `json:"appid"`
 	AppHash  string `json:"apphash"`
 	Phone    string `json:"phone"`
+	BotToken string `json:"bottoken,omitempty"`
+	BotChannels string `json:"botchannels,omitempty"`
 	CfgDir   string `json:"cfgdir"`
 	SaveDir  string `json:"saveDir"`
 	Gopeed   string `json:"gopeed,omitempty"`

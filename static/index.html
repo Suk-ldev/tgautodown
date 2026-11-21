@@ -19,6 +19,10 @@
 
             <div id="login-form" class="login-form hidden">
                 <h2>登录Telegram账号</h2>
+                <div class="login-mode-tabs">
+                    <button type="button" id="tab-user" class="btn btn-mode active" onclick="switchLoginMode('user')">手机号登录</button>
+                    <button type="button" id="tab-bot" class="btn btn-mode" onclick="switchLoginMode('bot')">Bot Token 登录</button>
+                </div>
                 <form id="user-form">
                     <div class="form-group">
                         <label for="appid">App ID:</label>
@@ -28,9 +32,17 @@
                         <label for="apphash">App Hash:</label>
                         <input type="text" id="apphash" name="apphash" required placeholder="请输入AppHash">
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" id="phone-group">
                         <label for="phone">手机号码:</label>
-                        <input type="tel" id="phone" name="phone" required placeholder="+861234567890 (必须带区号，如 +86)">
+                        <input type="tel" id="phone" name="phone" placeholder="+861234567890 (必须带区号，如 +86)">
+                    </div>
+                    <div class="form-group hidden" id="bottoken-group">
+                        <label for="bottoken">Bot Token:</label>
+                        <input type="text" id="bottoken" name="bottoken" placeholder="1234567890:ABC-DEF... (从 @BotFather 获取)">
+                    </div>
+                    <div class="form-group hidden" id="botchannels-group">
+                        <label for="botchannels">监听频道（可选）:</label>
+                        <input type="text" id="botchannels" name="botchannels" placeholder="频道标题或ID，逗号分隔；留空=监听bot加入的所有频道">
                     </div>
                     <button type="submit" class="btn btn-primary">提交登录信息</button>
                 </form>
@@ -45,6 +57,7 @@
                     </div>
                     <button type="submit" class="btn btn-primary">提交验证码</button>
                 </form>
+                <button type="button" class="btn btn-secondary btn-back" onclick="showLoginForm()">返回重新登录</button>
             </div>
 
             <div id="success-container" class="success-container hidden">

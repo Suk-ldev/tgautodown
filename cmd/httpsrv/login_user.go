@@ -11,9 +11,11 @@ import (
 
 // LoginUserRequest 用户登录请求结构
 type LoginUserRequest struct {
-	AppID   int    `json:"appid"`
-	AppHash string `json:"apphash"`
-	Phone   string `json:"phone"`
+	AppID       int    `json:"appid"`
+	AppHash     string `json:"apphash"`
+	Phone       string `json:"phone"`
+	BotToken    string `json:"bottoken"`
+	BotChannels string `json:"botchannels"`
 }
 
 // LoginUserResponse 用户登录响应结构
@@ -39,8 +41,8 @@ func HandleLoginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 验证必填字段
-	if req.AppID == 0 || req.AppHash == "" || req.Phone == "" {
+	// 验证必填字段：bot 模式需要 bottoken，userbot 模式需要 phone
+	if req.AppID == 0 || req.AppHash == "" || (req.Phone == "" && req.BotToken == "") {
 		logs.Warn(nil).Rid(rid).Int("appid", req.AppID).Str("apphash", req.AppHash).Str("phone", req.Phone).Msg("arg miss")
 		http.Error(w, "Missing required fields", http.StatusBadRequest)
 		return
@@ -48,7 +50,15 @@ func HandleLoginUser(w http.ResponseWriter, r *http.Request) {
 
 	logic.TGCfg.AppID = req.AppID
 	logic.TGCfg.AppHash = req.AppHash
-	logic.TGCfg.Phone = req.Phone
+	if req.BotToken != "" {
+		logic.TGCfg.BotToken = req.BotToken
+		logic.TGCfg.Phone = ""
+		logic.TGCfg.BotChannels = req.BotChannels
+	} else {
+		logic.TGCfg.Phone = req.Phone
+		logic.TGCfg.BotToken = ""
+		logic.TGCfg.BotChannels = ""
+	}
 
 	logic.SaveCfg()
 	go logic.TgSuberStart()
